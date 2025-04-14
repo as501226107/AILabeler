@@ -1,5 +1,9 @@
 # Flask 应用主入口
-from flask import Flask, request, render_template, jsonify, redirect, url_for, send_from_directory
+import shutil
+import uuid
+import zipfile
+
+from flask import Flask, request, render_template, jsonify, redirect, url_for, send_from_directory, send_file
 import os, json
 from werkzeug.utils import secure_filename
 
@@ -100,6 +104,58 @@ def get_project_classes(project):
         return send_from_directory("data/config", f"{project}_classes.json")
     else:
         return jsonify([])  # 没有类别时返回空列表
+@app.route('/export/<project>', methods=['GET', 'POST'])
+def export_project(project):
+    from flask import request
+    if request.method == 'GET':
+        return render_template('export.html', project=project)
 
+    fmt = request.form['format']
+    image_dir = os.path.join('data/images', project)
+    anno_dir = os.path.join('data/annotations', project)
+    class_file = os.path.join('data/config', f'{project}_classes.json')
+    export_id = uuid.uuid4().hex[:8]
+    export_path = f'data/exports/{project}_{export_id}_{fmt}'
+    os.makedirs(export_path, exist_ok=True)
+
+    # 加载类别映射
+    with open(class_file) as f:
+        classes = json.load(f)
+    class_map = {name: idx for idx, name in enumerate(classes)}
+
+    for name in os.listdir(anno_dir):
+        imgname = name.replace('.json', '')
+        with open(os.path.join(anno_dir, name)) as f:
+            boxes = json.load(f)
+
+        if fmt == 'yolo':
+            h, w = 1, 1  # 默认值（不读取实际图片尺寸）
+            label_lines = []
+            for b in boxes:
+                cls = class_map.get(b['label'], -1)
+                if cls < 0: continue
+                cx = (b['x'] + b['width'] / 2) / w
+                cy = (b['y'] + b['height'] / 2) / h
+                bw = b['width'] / w
+                bh = b['height'] / h
+                label_lines.append(f"{cls} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+            with open(os.path.join(export_path, imgname + '.txt'), 'w') as f:
+                f.write('\n'.join(label_lines))
+
+        elif fmt == 'coco':
+            # TODO: 可扩展为 COCO JSON（此处先占位）
+            pass
+        elif fmt == 'voc':
+            # TODO: 可扩展为 VOC XML（此处先占位）
+            pass
+
+    # 打包为 ZIP
+    zipname = f'{export_path}.zip'
+    with zipfile.ZipFile(zipname, 'w') as zipf:
+        for fname in os.listdir(export_path):
+            zipf.write(os.path.join(export_path, fname), arcname=fname)
+
+    shutil.rmtree(export_path)
+    return send_file(zipname, as_attachment=True)
 if __name__ == '__main__':
     app.run(debug=True)

@@ -6,40 +6,38 @@
   <title>目标检测标注系统 - 项目管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body {
-      background-color: #f8f9fa;
-    }
-    .project-card {
-      min-height: 120px;
-    }
+    body { background-color: #f8f9fa; }
+    .project-card { min-height: 150px; }
   </style>
 </head>
 <body>
-  <div class="container py-4">
-    <h2 class="mb-4">📁 我的项目管理</h2>
+<div class="container py-4">
+  <h2 class="mb-4">📁 项目管理 - YOLabeler</h2>
 
-    <form action="/create_project" method="post" class="row g-3 mb-4">
-      <div class="col-auto">
-        <input type="text" name="name" class="form-control" placeholder="请输入项目名称" required>
-      </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-primary">➕ 创建项目</button>
-      </div>
-    </form>
+  <form action="/create_project" method="post" class="row g-3 mb-4">
+    <div class="col-auto">
+      <input type="text" name="name" class="form-control" placeholder="请输入项目名称" required>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">➕ 创建项目</button>
+    </div>
+  </form>
 
-    <div class="row">
-      {% for p in projects %}
-      <div class="col-md-4">
-        <div class="card shadow-sm project-card mb-4">
-          <div class="card-body">
-            <h5 class="card-title">📦 {{ p }}</h5>
-            <a href="/project/{{ p }}" class="btn btn-sm btn-success mt-2">进入项目</a>
-            <!-- 可扩展删除按钮 / 导出功能 -->
+  <div class="row">
+    {% for p in projects %}
+    <div class="col-md-4">
+      <div class="card shadow-sm project-card mb-4">
+        <div class="card-body">
+          <h5 class="card-title">📦 {{ p }}</h5>
+          <div class="d-flex gap-2">
+            <a href="/project/{{ p }}" class="btn btn-sm btn-success">📂 进入项目</a>
+            <a href="/export/{{ p }}" class="btn btn-sm btn-outline-primary">📤 导出标注</a>
           </div>
         </div>
       </div>
-      {% endfor %}
     </div>
+    {% endfor %}
   </div>
+</div>
 </body>
 </html>
