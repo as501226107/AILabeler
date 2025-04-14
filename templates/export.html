@@ -1,0 +1,26 @@
+<!-- templates/export.html -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>导出标注数据 - {{ project }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container py-4">
+  <h3>📤 导出标注 - 项目：{{ project }}</h3>
+  <form method="post">
+    <div class="mb-3">
+      <label for="format" class="form-label">选择导出格式</label>
+      <select name="format" id="format" class="form-select">
+        <option value="yolo">YOLO (txt)</option>
+        <option value="coco">COCO (JSON)</option>
+        <option value="voc">Pascal VOC (XML)</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-success">⬇️ 导出 ZIP 文件</button>
+    <a href="/project/{{ project }}" class="btn btn-secondary">← 返回项目</a>
+  </form>
+</div>
+</body>
+</html>

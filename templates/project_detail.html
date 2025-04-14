@@ -1,0 +1,93 @@
+<!-- templates/project_detail.html -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ project }} - 图像标注</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+    .image-thumb {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .dropzone {
+      border: 2px dashed #aaa;
+      padding: 20px;
+      text-align: center;
+      color: #999;
+      background: #fefefe;
+      margin-bottom: 24px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    <h3 class="mb-3">📦 项目：{{ project }}</h3>
+
+    <form id="uploadForm" class="mb-3" enctype="multipart/form-data">
+      <div class="dropzone" id="dropzone">拖拽图片到此处上传，或点击选择文件</div>
+      <input type="file" name="image" id="fileInput" class="form-control d-none">
+    </form>
+
+    <div class="image-grid">
+  {% for img in images %}
+    <div class="text-center">
+      <a href="/annotate/{{ project }}/{{ img }}">
+  <img src="/images/{{ project }}/{{ img }}" class="image-thumb">
+</a>
+      <div class="small mt-1">{{ img }}</div>
+    </div>
+  {% endfor %}
+</div>
+
+  </div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const form = document.getElementById('uploadForm');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('border-primary');
+  });
+
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('border-primary');
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('border-primary');
+    const files = e.dataTransfer.files;
+    upload(files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      upload(fileInput.files[0]);
+    }
+  });
+
+  function upload(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    fetch(`/upload/{{ project }}`, {
+      method: 'POST',
+      body: formData
+    }).then(() => window.location.reload());
+  }
+</script>
+</body>
+</html>

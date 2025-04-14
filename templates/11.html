@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Konva 框绘制测试</title>
+  <script src="https://cdn.jsdelivr.net/npm/konva@8.4.3/konva.min.js"></script>
+  <style>
+    #container {
+      border: 1px solid #ccc;
+      margin: 30px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="margin-left: 30px;">Konva 框绘制测试页面</h2>
+  <div id="container"></div>
+
+  <script>
+    const width = 800;
+    const height = 500;
+    const stage = new Konva.Stage({
+      container: 'container',
+      width,
+      height
+    });
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
+    let currentRect = null;
+    const boxes = [];
+
+    stage.on('mousedown', (e) => {
+      if (e.target !== stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+
+      currentRect = new Konva.Rect({
+        x: pos.x,
+        y: pos.y,
+        width: 1,
+        height: 1,
+        stroke: 'red',
+        strokeWidth: 2,
+        draggable: true
+      });
+      layer.add(currentRect);
+    });
+
+    stage.on('mousemove', () => {
+      if (!currentRect) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+
+      currentRect.width(pos.x - currentRect.x());
+      currentRect.height(pos.y - currentRect.y());
+      layer.batchDraw();
+    });
+
+    stage.on('mouseup', () => {
+      if (currentRect) {
+        boxes.push(currentRect);
+        currentRect = null;
+      }
+    });
+  </script>
+</body>
+</html>

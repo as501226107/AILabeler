@@ -1,0 +1,183 @@
+<!-- annotate.html：集成类别管理（下拉选择） -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>图像标注 - {{ filename }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/konva@8.4.3/konva.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    #container { border: 1px solid #ccc; display: inline-block; }
+    .canvas-area { flex: 1; }
+    .sidebar { width: 300px; background: #fff; border-left: 1px solid #ddd; padding: 10px; overflow-y: auto; max-height: 90vh; }
+    .sidebar .box-item { cursor: pointer; border-left: 4px solid transparent; padding-left: 6px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .sidebar .box-item.active { border-color: orange; background: #fff3cd; }
+    select.form-select-sm { width: 90%; }
+  </style>
+</head>
+<body>
+<div class="container-fluid py-3">
+  <h4>🎯 标注图像：{{ filename }}</h4>
+  <div class="d-flex">
+    <div class="canvas-area">
+      <div id="container"></div>
+      <div class="my-2 d-flex align-items-center gap-2">
+        <select id="globalLabel" class="form-select form-select-sm" style="width: 200px;"></select>
+        <button class="btn btn-primary" onclick="saveBoxes()">💾 保存</button>
+        <a href="/project/{{ project }}" class="btn btn-secondary">← 返回</a>
+        <a href="/project/{{ project }}/classes" class="btn btn-outline-secondary">⚙️ 设置类别</a>
+      </div>
+    </div>
+    <div class="sidebar">
+      <h6>📋 当前标注框：</h6>
+      <div id="boxList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const project = "{{ project }}";
+const filename = "{{ filename }}";
+const imagePath = `/images/${project}/${filename}`;
+let categories = [];
+const stageWidth = 800;
+let stage, layer;
+let currentRect = null;
+let boxes = [];
+
+// 1. 加载类别列表
+fetch(`/config/${project}_classes.json`).then(r => r.json()).then(data => {
+  categories = data;
+  const globalLabel = document.getElementById('globalLabel');
+  categories.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = c;
+    globalLabel.appendChild(opt);
+  });
+});
+
+// 2. 加载图像并初始化 Konva
+const image = new Image();
+image.onload = () => {
+  const scale = stageWidth / image.width;
+  const height = image.height * scale;
+  stage = new Konva.Stage({ container: 'container', width: stageWidth, height });
+  layer = new Konva.Layer();
+  stage.add(layer);
+  const konvaImage = new Konva.Image({ image, width: stageWidth, height });
+  layer.add(konvaImage);
+  layer.draw();
+
+  fetch(`/load/${project}/${filename}`)
+    .then(res => res.json())
+    .then(data => {
+      data.forEach((item, idx) => addBox(item.x, item.y, item.width, item.height, item.label, idx));
+      updateBoxList();
+    });
+  setupDrawing();
+};
+image.src = imagePath;
+
+// 3. 框绘制与交互逻辑
+function setupDrawing() {
+  stage.on('mousedown', e => {
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+    currentRect = new Konva.Rect({ x: pos.x, y: pos.y, width: 1, height: 1, stroke: 'blue', strokeWidth: 2, draggable: true });
+    layer.add(currentRect);
+  });
+  stage.on('mousemove', () => {
+    if (!currentRect) return;
+    const pos = stage.getPointerPosition();
+    const x0 = currentRect.x(), y0 = currentRect.y();
+    const newX = Math.min(x0, pos.x);
+    const newY = Math.min(y0, pos.y);
+    currentRect.setAttrs({ x: newX, y: newY, width: Math.abs(pos.x - x0), height: Math.abs(pos.y - y0) });
+    layer.batchDraw();
+  });
+  stage.on('mouseup', () => {
+    if (currentRect) {
+      const w = currentRect.width(), h = currentRect.height();
+      if (w < 5 || h < 5) currentRect.destroy();
+      else {
+        const label = document.getElementById('globalLabel').value;
+        addBox(currentRect.x(), currentRect.y(), w, h, label);
+        updateBoxList();
+      }
+      currentRect = null;
+      layer.draw();
+    }
+  });
+}
+
+function addBox(x, y, width, height, label, index = boxes.length) {
+  const rect = new Konva.Rect({ x, y, width, height, stroke: 'red', strokeWidth: 2, draggable: true });
+  const text = new Konva.Text({ x: x + 4, y: y - 20, text: label, fontSize: 14, fill: 'red' });
+  layer.add(rect);
+  layer.add(text);
+  const box = { rect, text, label, id: index };
+  boxes.push(box);
+  rect.on('click', () => highlightBox(box.id));
+  text.on('click', () => highlightBox(box.id));
+}
+
+function updateBoxList() {
+  const list = document.getElementById('boxList');
+  list.innerHTML = '';
+  boxes.forEach((b, i) => {
+    const item = document.createElement('div');
+    item.className = 'box-item';
+    const labelSelect = document.createElement('select');
+    labelSelect.className = 'form-select form-select-sm';
+    categories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = c;
+      if (b.label === c) opt.selected = true;
+      labelSelect.appendChild(opt);
+    });
+    labelSelect.onchange = () => {
+      b.label = labelSelect.value;
+      b.text.text(b.label);
+      layer.draw();
+    };
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-sm btn-danger';
+    delBtn.textContent = '删除';
+    delBtn.onclick = () => deleteBox(i);
+    item.appendChild(labelSelect);
+    item.appendChild(delBtn);
+    item.onclick = () => highlightBox(i);
+    list.appendChild(item);
+  });
+}
+
+function highlightBox(index) {
+  boxes.forEach((b, i) => {
+    b.rect.stroke(i === index ? 'orange' : 'red');
+    b.text.fill(i === index ? 'orange' : 'red');
+  });
+  layer.draw();
+}
+
+function deleteBox(index) {
+  boxes[index].rect.destroy();
+  boxes[index].text.destroy();
+  boxes.splice(index, 1);
+  updateBoxList();
+  layer.draw();
+}
+
+function saveBoxes() {
+  const result = boxes.map(b => ({
+    x: b.rect.x(), y: b.rect.y(), width: b.rect.width(), height: b.rect.height(), label: b.label
+  }));
+  fetch(`/save/${project}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, boxes: result })
+  }).then(() => alert('✅ 标注已保存'));
+}
+</script>
+</body>
+</html>
