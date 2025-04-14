@@ -3,91 +3,41 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>{{ project }} - 图像标注</title>
+  <title>项目详情 - {{ project }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .image-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 16px;
-    }
-    .image-thumb {
-      width: 100%;
-      height: 120px;
-      object-fit: cover;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    .dropzone {
-      border: 2px dashed #aaa;
-      padding: 20px;
-      text-align: center;
-      color: #999;
-      background: #fefefe;
-      margin-bottom: 24px;
-      border-radius: 10px;
-    }
+    .image-thumb { max-width: 100%; height: auto; border: 2px solid #ccc; border-radius: 4px; }
+    .image-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .image-item { width: 180px; text-align: center; }
   </style>
 </head>
 <body>
-  <div class="container py-4">
-    <h3 class="mb-3">📦 项目：{{ project }}</h3>
+<div class="container py-4">
+  <h3 class="mb-4">📁 项目详情 - {{ project }}</h3>
 
-    <form id="uploadForm" class="mb-3" enctype="multipart/form-data">
-      <div class="dropzone" id="dropzone">拖拽图片到此处上传，或点击选择文件</div>
-      <input type="file" name="image" id="fileInput" class="form-control d-none">
-    </form>
-
-    <div class="image-grid">
-  {% for img in images %}
-    <div class="text-center">
-      <a href="/annotate/{{ project }}/{{ img }}">
-  <img src="/images/{{ project }}/{{ img }}" class="image-thumb">
-</a>
-      <div class="small mt-1">{{ img }}</div>
-    </div>
-  {% endfor %}
-</div>
-
+  <div class="mb-3 d-flex gap-2">
+    <a href="/project/{{ project }}/classes" class="btn btn-outline-secondary">⚙️ 类别管理</a>
+    <a href="/project/{{ project }}/images" class="btn btn-outline-primary">🖼 图像预览</a>
+    <a href="/export/{{ project }}" class="btn btn-outline-success">📤 导出标注</a>
   </div>
 
-<script>
-  const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('fileInput');
-  const form = document.getElementById('uploadForm');
+  <form action="/upload/{{ project }}" method="post" enctype="multipart/form-data" class="mb-4">
+    <div class="input-group">
+      <input type="file" name="images" accept="image/*" multiple class="form-control">
+      <button type="submit" class="btn btn-primary">上传图像</button>
+    </div>
+  </form>
 
-  dropzone.addEventListener('click', () => fileInput.click());
-
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('border-primary');
-  });
-
-  dropzone.addEventListener('dragleave', () => {
-    dropzone.classList.remove('border-primary');
-  });
-
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('border-primary');
-    const files = e.dataTransfer.files;
-    upload(files[0]);
-  });
-
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files.length > 0) {
-      upload(fileInput.files[0]);
-    }
-  });
-
-  function upload(file) {
-    const formData = new FormData();
-    formData.append('image', file);
-    fetch(`/upload/{{ project }}`, {
-      method: 'POST',
-      body: formData
-    }).then(() => window.location.reload());
-  }
-</script>
+  <div class="image-grid">
+    {% for img in images %}
+    <div class="image-item">
+      <a href="/annotate/{{ project }}/{{ img }}">
+        <img src="/images/{{ project }}/{{ img }}" class="image-thumb" alt="{{ img }}">
+      </a>
+      <div class="small mt-1">{{ img }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 </body>
 </html>

@@ -1,4 +1,4 @@
-<!-- annotate.html：集成类别管理（下拉选择） -->
+<!-- annotate.html：修复自动标注框与图像坐标不对齐问题（使用原图尺寸显示） -->
 <!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -27,6 +27,13 @@
         <button class="btn btn-primary" onclick="saveBoxes()">💾 保存</button>
         <a href="/project/{{ project }}" class="btn btn-secondary">← 返回</a>
         <a href="/project/{{ project }}/classes" class="btn btn-outline-secondary">⚙️ 设置类别</a>
+        <a href="/autolabel/{{ project }}/{{ filename }}" class="btn btn-warning">🤖 自动标注</a>
+        {% if prev_filename %}
+          <a href="/annotate/{{ project }}/{{ prev_filename }}" class="btn btn-outline-dark">⬆ 上一张</a>
+        {% endif %}
+        {% if next_filename %}
+          <a href="/annotate/{{ project }}/{{ next_filename }}" class="btn btn-outline-dark">⬇ 下一张</a>
+        {% endif %}
       </div>
     </div>
     <div class="sidebar">
@@ -40,13 +47,12 @@
 const project = "{{ project }}";
 const filename = "{{ filename }}";
 const imagePath = `/images/${project}/${filename}`;
+const preloadBoxes = {{ preload|safe if preload else 'null' }};
 let categories = [];
-const stageWidth = 800;
 let stage, layer;
 let currentRect = null;
 let boxes = [];
 
-// 1. 加载类别列表
 fetch(`/config/${project}_classes.json`).then(r => r.json()).then(data => {
   categories = data;
   const globalLabel = document.getElementById('globalLabel');
@@ -55,31 +61,57 @@ fetch(`/config/${project}_classes.json`).then(r => r.json()).then(data => {
     opt.value = opt.textContent = c;
     globalLabel.appendChild(opt);
   });
+
+  // ✅ 移入图像逻辑，确保类别加载完
+  const image = new Image();
+  image.onload = () => {
+    stage = new Konva.Stage({ container: 'container', width: image.width, height: image.height });
+    layer = new Konva.Layer();
+    stage.add(layer);
+    const konvaImage = new Konva.Image({ image, width: image.width, height: image.height });
+    layer.add(konvaImage);
+    layer.draw();
+
+    if (preloadBoxes && preloadBoxes.length > 0) {
+      preloadBoxes.forEach((b, i) => {
+        addBox(b.x, b.y, b.width, b.height, b.label, boxes.length);
+      });
+    }
+    updateBoxList(); // ✅ 确保此时 categories 已加载
+    setupDrawing();
+  };
+  image.src = imagePath;
 });
 
-// 2. 加载图像并初始化 Konva
+
 const image = new Image();
 image.onload = () => {
-  const scale = stageWidth / image.width;
-  const height = image.height * scale;
-  stage = new Konva.Stage({ container: 'container', width: stageWidth, height });
+  const imgW = image.width;
+  const imgH = image.height;
+  stage = new Konva.Stage({ container: 'container', width: imgW, height: imgH });
   layer = new Konva.Layer();
   stage.add(layer);
-  const konvaImage = new Konva.Image({ image, width: stageWidth, height });
+  const konvaImage = new Konva.Image({ image: image, width: imgW, height: imgH });
   layer.add(konvaImage);
   layer.draw();
 
-  fetch(`/load/${project}/${filename}`)
-    .then(res => res.json())
-    .then(data => {
+  if (preloadBoxes && preloadBoxes.length > 0) {
+    preloadBoxes.forEach((b, i) => {
+      addBox(b.x, b.y, b.width, b.height, b.label, boxes.length);
+    });
+    updateBoxList();
+    setupDrawing();
+
+  } else {
+    fetch(`/load/${project}/${filename}`).then(res => res.json()).then(data => {
       data.forEach((item, idx) => addBox(item.x, item.y, item.width, item.height, item.label, idx));
       updateBoxList();
     });
+  }
   setupDrawing();
 };
 image.src = imagePath;
 
-// 3. 框绘制与交互逻辑
 function setupDrawing() {
   stage.on('mousedown', e => {
     const pos = stage.getPointerPosition();
@@ -112,11 +144,12 @@ function setupDrawing() {
 }
 
 function addBox(x, y, width, height, label, index = boxes.length) {
+  const safeLabel = label || '未命名';
   const rect = new Konva.Rect({ x, y, width, height, stroke: 'red', strokeWidth: 2, draggable: true });
-  const text = new Konva.Text({ x: x + 4, y: y - 20, text: label, fontSize: 14, fill: 'red' });
+  const text = new Konva.Text({ x: x + 4, y: y - 20, text: safeLabel, fontSize: 14, fill: 'red' });
   layer.add(rect);
   layer.add(text);
-  const box = { rect, text, label, id: index };
+  const box = { rect, text, label: safeLabel, id: index };
   boxes.push(box);
   rect.on('click', () => highlightBox(box.id));
   text.on('click', () => highlightBox(box.id));
@@ -133,7 +166,7 @@ function updateBoxList() {
     categories.forEach(c => {
       const opt = document.createElement('option');
       opt.value = opt.textContent = c;
-      if (b.label === c) opt.selected = true;
+      if (b.label && b.label.toLowerCase() === c.toLowerCase()) opt.selected = true;
       labelSelect.appendChild(opt);
     });
     labelSelect.onchange = () => {
