@@ -1,0 +1,83 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}AILabeler{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <!-- 🔝 顶部导航栏 -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4 mb-4">
+    <a class="navbar-brand" href="/">AILabeler</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav me-auto">
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+          <li class="nav-item">
+            <a class="nav-link" href="/admin/assign/default">任务分配</a>
+          </li>
+        {% endif %}
+        {% if current_user.is_authenticated %}
+          <li class="nav-item">
+            <a class="nav-link" href="/my_tasks">我的任务</a>
+          </li>
+        {% endif %}
+      </ul>
+      <ul class="navbar-nav">
+        {% if current_user.is_authenticated %}
+          <li class="nav-item">
+            <span class="navbar-text text-white me-3">
+              👤 {{ current_user.username }}（{{ current_user.role }}）
+            </span>
+          </li>
+          <li class="nav-item">
+            <a href="/logout" class="btn btn-outline-light btn-sm">退出</a>
+          </li>
+        {% else %}
+          <li class="nav-item">
+            <a href="/login" class="btn btn-outline-light btn-sm">登录</a>
+          </li>
+        {% endif %}
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    {% block content %}
+  <div class="container py-4">
+  <h2 class="mb-4">📁 项目管理 - YOLabeler</h2>
+
+  <form action="/create_project" method="post" class="row g-3 mb-4">
+    <div class="col-auto">
+      <input type="text" name="name" class="form-control" placeholder="请输入项目名称" required>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">➕ 创建项目</button>
+    </div>
+  </form>
+
+  <div class="row">
+    {% for p in projects %}
+    <div class="col-md-4">
+      <div class="card shadow-sm project-card mb-4">
+        <div class="card-body">
+          <h5 class="card-title">📦 {{ p }}</h5>
+          <div class="d-flex gap-2">
+            <a href="/project/{{ p }}" class="btn btn-sm btn-success">📂 进入项目</a>
+            <a href="/export/{{ p }}" class="btn btn-sm btn-outline-primary">📤 导出标注</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

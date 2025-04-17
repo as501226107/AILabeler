@@ -3,12 +3,24 @@ import shutil
 import uuid
 import zipfile
 
-from flask import Flask, request, render_template, jsonify, redirect, url_for, send_from_directory, send_file
+from flask import Flask, request, render_template, jsonify, redirect, url_for, send_from_directory, send_file, flash, \
+    abort
 import os, json
+
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from flask_login import UserMixin, logout_user, login_user, login_required, current_user
+from flask_login import LoginManager
+from werkzeug.security import generate_password_hash, check_password_hash
+from model import db, User  # ✅ 引用统一模型
 
 app = Flask(__name__)
+app.secret_key = 'sk-a1b2c3d4-secret-2025'
 
+db_path = os.path.abspath('data/ailabeler.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)  # ✅ 显式绑定
 BASE_DIR = 'data'
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'images')
 ANNOTATION_FOLDER = os.path.join(BASE_DIR, 'annotations')
@@ -22,21 +34,112 @@ if not os.path.exists(PROJECTS_FILE):
     with open(PROJECTS_FILE, 'w') as f:
         json.dump([], f)
 
+
+
+
+class ImageTask(db.Model):
+    __tablename__ = 'image_tasks'
+    id = db.Column(db.Integer, primary_key=True)
+    project = db.Column(db.String(100), nullable=False)
+    filename = db.Column(db.String(200), nullable=False)
+    assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'))
+    status = db.Column(db.String(20), default='pending')  # pending / completed
+
+    user = db.relationship('User', backref='tasks')
+
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if User.query.filter_by(username=username).first():
+            flash('用户名已存在')
+            return redirect(url_for('register'))
+        user = User(username=username)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        flash('注册成功，请登录')
+        return redirect(url_for('login'))
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('index'))
+        else:
+            flash('用户名或密码错误')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 # ---------------- 页面 ----------------
 @app.route('/')
+@login_required
 def index():
     with open(PROJECTS_FILE) as f:
         projects = json.load(f)
-    return render_template('project_list.html', projects=projects)
+    return render_template('base.html', projects=projects)
 
 @app.route('/project/<project_name>')
+@login_required
+
 def project_detail(project_name):
     image_dir = os.path.join(UPLOAD_FOLDER, project_name)
     image_files = os.listdir(image_dir) if os.path.exists(image_dir) else []
     return render_template('project_detail.html', project=project_name, images=image_files)
+@app.route('/my_tasks')
+@login_required
+def my_tasks():
+    tasks = ImageTask.query.filter_by(assigned_to=current_user.id).all()
+    return render_template('my_tasks.html', tasks=tasks)
+
+@app.route('/admin/assign/<project>', methods=['GET', 'POST'])
+@login_required
+def admin_assign(project):
+    if current_user.role != 'admin':
+        return abort(403)
+
+    image_dir = os.path.join('data/images', project)
+    image_list = sorted(os.listdir(image_dir))
+    users = User.query.all()
+    assigned_map = {(t.filename, t.assigned_to) for t in ImageTask.query.filter_by(project=project).all()}
+
+    if request.method == 'POST':
+        filename = request.form['filename']
+        user_id = int(request.form['user_id'])
+        task = ImageTask.query.filter_by(project=project, filename=filename).first()
+        if task:
+            task.assigned_to = user_id
+        else:
+            task = ImageTask(project=project, filename=filename, assigned_to=user_id)
+            db.session.add(task)
+        db.session.commit()
+        flash(f"图像 {filename} 已分配给用户 ID {user_id}")
+        return redirect(url_for('admin_assign', project=project))
+
+    return render_template('admin_assign.html', project=project, images=image_list, users=users, assigned_map=assigned_map)
 
 # ---------------- 接口 ----------------
 @app.route('/create_project', methods=['POST'])
+@login_required
 def create_project():
     name = request.form['name']
     with open(PROJECTS_FILE) as f:
@@ -50,6 +153,7 @@ def create_project():
     return redirect(url_for('index'))
 
 @app.route('/upload/<project_name>', methods=['POST'])
+@login_required
 def upload(project_name):
     image = request.files['image']
     filename = secure_filename(image.filename)
@@ -59,6 +163,7 @@ def upload(project_name):
     return 'OK'
 
 @app.route('/save/<project_name>', methods=['POST'])
+@login_required
 def save(project_name):
     data = request.get_json()
     filename = data['filename'] + '.json'
@@ -67,6 +172,7 @@ def save(project_name):
     return 'Saved'
 
 @app.route('/load/<project_name>/<filename>')
+@login_required
 def load(project_name, filename):
     filepath = os.path.join(ANNOTATION_FOLDER, project_name, filename + '.json')
     if os.path.exists(filepath):
@@ -74,6 +180,7 @@ def load(project_name, filename):
             return jsonify(json.load(f))
     return jsonify([])
 @app.route('/annotate/<project>/<filename>')
+@login_required
 def annotate(project, filename):
     import os
 
@@ -105,10 +212,13 @@ def annotate(project, filename):
     )
 
 @app.route('/images/<project>/<filename>')
+@login_required
 def serve_image(project, filename):
     return send_from_directory(os.path.join(UPLOAD_FOLDER, project), filename)
 
+
 @app.route('/project/<project>/classes', methods=['GET', 'POST'])
+@login_required
 def project_classes(project):
     class_file = f'data/config/{project}_classes.json'
     os.makedirs('data/config', exist_ok=True)
@@ -125,7 +235,9 @@ def project_classes(project):
     else:
         class_text = ''
     return render_template('project_classes.html', project=project, class_text=class_text)
+
 @app.route('/config/<project>_classes.json')
+@login_required
 def get_project_classes(project):
     path = f"data/config/{project}_classes.json"
     if os.path.exists(path):
@@ -137,6 +249,7 @@ import zipfile, shutil, uuid, datetime
 from flask import send_file
 
 @app.route('/export/<project>', methods=['GET', 'POST'])
+@login_required
 def export_project(project):
     from flask import request
     if request.method == 'GET':
@@ -221,7 +334,9 @@ def export_project(project):
 
 
 # app.py 中添加图像预览页路由
+
 @app.route('/project/<project>/images')
+@login_required
 def project_images(project):
     image_dir = os.path.join('data/images', project)
     anno_dir = os.path.join('data/annotations', project)
@@ -238,6 +353,7 @@ from ultralytics import YOLO
 model = YOLO("yolov8n.pt")  # 可修改为自定义模型路径
 
 @app.route('/autolabel/<project>/<filename>', methods=['GET'])
+@login_required
 def autolabel_image(project, filename):
     import cv2
     from PIL import Image
